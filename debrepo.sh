@@ -17,10 +17,16 @@
 ### START OF CONFIG ###
 ORG_NAME="Acme Corp"
 ORG_ALIAS="acme"
-KEYID=no-spam@acme.com
-DEB_REPO=/var/www/deb-repo
-WORK_DIR=~/debrepo
+KEYID="no-spam@acme.com"
+DEB_REPO=~/debrepo/packages
+WORK_DIR=~/debrepo/work
+KEY_SERVER="keyserver.ubuntu.com"
 ### END OF CONFIG ###
+
+install_deps() {
+apt install haveged --yes
+apt install inotify-tools
+}
 
 rename_debs() {
     dir=$1
@@ -40,7 +46,7 @@ rename_debs() {
 export() {
     target="$DEB_REPO/$ORG_ALIAS.asc"
     echo "Exporting public key to '$target'"
-    gpg --homedir "$WORK_DIR/gpg" --export -a $KEYID > $target
+    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --export -a $KEYID > $target
 }
 
 update_repo() {
@@ -50,7 +56,7 @@ update_repo() {
     #find "$DEB_REPO/$flavor" -maxdepth 1 -type f -name *.deb -exec dpkg-sig --sign builder '{}' \;
 
     if [ ! -d "$DEB_REPO/$flavor" ]; then
-      echo "No directory for flavor $flavor in $DEB_REPO"
+      echo "No directory for flavor '$flavor' in $DEB_REPO"
       exit 1
     fi
 
@@ -75,32 +81,38 @@ EOF
 
     echo "Sign Release files"
     rm -f "$DEB_REPO/$flavor/InRelease" "$DEB_REPO/$flavor/Release.gpg" 
-    gpg --homedir "$WORK_DIR/gpg" --digest-algo SHA512 --clearsign -o "$DEB_REPO/$flavor/InRelease" "$DEB_REPO/$flavor/Release"
-    gpg --homedir "$WORK_DIR/gpg" --digest-algo SHA512 -abs -o "$DEB_REPO/$flavor/Release.gpg" "$DEB_REPO/$flavor/Release"
+    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --digest-algo SHA512 -u "$KEYID" --clearsign -o "$DEB_REPO/$flavor/InRelease" "$DEB_REPO/$flavor/Release"
+    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --digest-algo SHA512 -u "$KEYID" -abs -o "$DEB_REPO/$flavor/Release.gpg" "$DEB_REPO/$flavor/Release"
 }
 
-# Preliminary checks
-if [ ! -w "$WORK_DIR" ]; then
-   echo "Non-writable work directory: $WORK_DIR"
-   exit 1
-fi
+function init() {
+  if [ ! -d "$WORK_DIR" ]; then
+    echo "Creating work directory: $WORK_DIR"
+    mkdir -p "$WORK_DIR"    
+  fi
 
-if [ ! -w "$DEB_REPO" ]; then
-   echo "Non-writable debian repository directory: $DEB_REPO"
-   exit 1
-fi
+  if [ ! -d "$DEB_REPO" ]; then
+    echo "Creating debian repository directory: $DEB_REPO"
+    mkdir -p "$DEB_REPO"
+  fi
 
+  pre_check
 
-case "$1" in
-  create)
+  create_keys
+
+  publish_key
+  
+}
+
+function create_keys() {
+  if [ ! -d "$WORK_DIR/gpg" ]; then
+    echo 'Initializing GPG keyring'
+    mkdir -p "$WORK_DIR/gpg"
+    chmod 700 "$WORK_DIR/gpg"
+    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --fingerprint
+  fi
 	
-	if [ ! -d "$WORK_DIR/gpg" ]; then
-            echo 'Initializing GPG keyring'
-	    mkdir -p "$WORK_DIR"
-            gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --fingerprint
-	fi
-	
-	cat > "$WORK_DIR/key.spec" <<- EOF
+  cat > "$WORK_DIR/key.spec" <<- EOF
 	#Auto-generated, do not edit!	
 	%no-protection
 	Key-Type: 1
@@ -112,17 +124,44 @@ case "$1" in
 	Expire-Date: 0
 	EOF
 
-	gpg --homedir "$WORK_DIR/gpg" --list-keys "$KEYID" &>/dev/null
-	if [ $? -ne 0 ]; then
-		echo "Creating GPG keys"
-		gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --batch --gen-key key.spec 
-		gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --export -a $KEYID > "$DEB_REPO/$ORG_ALIAS.asc"
-	else
-		echo "GPG key $KEYID already exists"
-		exit 1
-	fi
+  gpg --homedir "$WORK_DIR/gpg"  --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --list-keys "$KEYID" &>/dev/null
+  if [ $? -ne 0 ]; then
+    echo "Creating GPG keys"
+    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --batch --gen-key "$WORK_DIR/key.spec" 
+  else
+    echo "GPG key $KEYID already exists"
+    exit 1
+  fi
+}
 
-    ;;
+
+
+function pre_check() {
+  if [ ! -w "$WORK_DIR" ]; then
+    echo "Non-writable work directory: $WORK_DIR"
+    exit 1
+  fi
+
+  if [ ! -w "$DEB_REPO" ]; then
+    echo "Non-writable debian repository directory: $DEB_REPO"
+    exit 1
+  fi
+}
+
+case "$1" in
+
+  install-deps)
+    install_deps
+  ;;
+
+  init)
+    init
+  ;;
+
+  create-keys)
+    create_keys
+  ;;
+  
   update)
     if [[ $# -ne 2 ]] ; then
 	echo "Need sub-directory for debian repo specified, like 'test' or 'stable'"
@@ -148,13 +187,55 @@ case "$1" in
 	done < <(inotifywait -mrq -e close_write "$DEB_REPO")
   ;;
 
-  export)
-    export
+  import-private-key)
+    src=${1-text:-"$WORK_DIR/private.key"}
+    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --allow-secret-key-import --import "$src"
   ;;
 
+  import-public-key)
+    src=${1:-"$WORK_DIR/public.asc"}
+    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --import "$src"
+  ;;
+
+  publish-key)
+    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --send-keys --keyserver "$KEY_SERVER" 
+  ;;
+  export-public-key)
+    export 
+  ;;
+
+  export-private-key)
+    target=${1:-"$WORK_DIR/private.key"}
+    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --export-secret-key -a "$KEYID" > "$target"
+  ;;  
   *)
-    echo "Usage: $0 {create|update|watch|export|rename}" >&2
+    cat << EOF
+Usage: $0
+
+  init - attempts to setup a ready repo for you
+
+  install-deps - installs required software
+
+  create-keys - Creates the necessary directories and PGP keys for signing the Release file of the repository
+
+  update <flavor> - Update the repository with any new files added/removed
+
+  watch - Watches the "$DEB_REPO" for changes and calls update when needed
+
+  export-private-key <file> - exports the private key
+
+  export-public-key <file> - exports the public key
+
+  import-private-key <file> - imports the private key
+
+  import-public-key <file> - import the public key
+
+  publish-key - publishes the public key to the key-server '$KEY_SERVER'
+
+  rename - Looks at the metadata in the DEB packages in '$DEB_REPO' and renames them accordingly
+
+EOF
     exit 1
-    ;;
+  ;;
 esac
 
