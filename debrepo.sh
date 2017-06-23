@@ -85,6 +85,10 @@ EOF
     gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --digest-algo SHA512 -u "$KEYID" -abs -o "$DEB_REPO/$flavor/Release.gpg" "$DEB_REPO/$flavor/Release"
 }
 
+function publish_key() {
+  gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --send-keys --keyserver "$KEY_SERVER" 
+}
+
 function init() {
   if [ ! -d "$WORK_DIR" ]; then
     echo "Creating work directory: $WORK_DIR"
@@ -101,7 +105,6 @@ function init() {
   create_keys
 
   publish_key
-  
 }
 
 function create_keys() {
@@ -198,7 +201,7 @@ case "$1" in
   ;;
 
   publish-key)
-    gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --send-keys --keyserver "$KEY_SERVER" 
+    publish_key
   ;;
   export-public-key)
     export 
