@@ -24,8 +24,9 @@ KEY_SERVER="keyserver.ubuntu.com"
 ### END OF CONFIG ###
 
 install_deps() {
-  apt install haveged
-  apt install inotify-tools
+  apt-get update
+  apt install haveged -y
+  apt install inotify-tools -y
 }
 
 rename_debs() {
