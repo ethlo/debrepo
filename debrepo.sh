@@ -87,7 +87,10 @@ EOF
 }
 
 function publish_key() {
-  gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --send-keys --keyserver "$KEY_SERVER" 
+  # get key id in LONG format
+  # other way to get it:  --list-keys --keyid-format LONG
+  LONGKEYID=`gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --list-keys --with-colons | grep sub | cut -d ':' -f 5`
+  gpg --homedir "$WORK_DIR/gpg" --no-default-keyring --keyring "$WORK_DIR/gpg/keyring" --send-keys --keyserver "$KEY_SERVER" $LONGKEYID
 }
 
 function init() {
@@ -172,7 +175,7 @@ case "$1" in
         exit 1
     fi
     update_repo $2
-    ;;
+  ;;
 
   rename)
     if [[ $# -ne 2 ]] ; then
@@ -204,6 +207,7 @@ case "$1" in
   publish-key)
     publish_key
   ;;
+
   export-public-key)
     export 
   ;;
