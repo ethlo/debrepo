@@ -145,7 +145,6 @@ function create_keys() {
 }
 
 
-
 function pre_check() {
   if [ ! -w "$WORK_DIR" ]; then
     echo "Non-writable work directory: $WORK_DIR"
