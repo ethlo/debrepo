@@ -218,29 +218,22 @@ case "$1" in
   ;;  
   *)
     cat << EOF
-Usage: $0
+Usage: $0 ARG [OPTION]
 
-  init - attempts to setup a ready repo for you
+Initialization
+  init                       - attempts to setup a ready repo for you
+  install-deps               - installs required software
+  create-keys                - Creates the necessary directories and PGP keys for signing the Release file of the repository
+  export-private-key <file>  - exports the private key
+  export-public-key <file>   - exports the public key
+  import-private-key <file>  - imports the private key
+  import-public-key <file>   - import the public key
+  publish-key                - publishes the public key to the key-server '$KEY_SERVER'
 
-  install-deps - installs required software
-
-  create-keys - Creates the necessary directories and PGP keys for signing the Release file of the repository
-
-  update <flavor> - Update the repository with any new files added/removed
-
-  watch - Watches the "$DEB_REPO" for changes and calls update when needed
-
-  export-private-key <file> - exports the private key
-
-  export-public-key <file> - exports the public key
-
-  import-private-key <file> - imports the private key
-
-  import-public-key <file> - import the public key
-
-  publish-key - publishes the public key to the key-server '$KEY_SERVER'
-
-  rename - Looks at the metadata in the DEB packages in '$DEB_REPO' and renames them accordingly
+Maintenance
+  update <flavor>            - Update the repository with any new files added/removed
+  rename                     - Looks at the metadata in the DEB packages in '$DEB_REPO' and renames them accordingly
+  watch                      - Watches the "$DEB_REPO" for changes and calls update when needed
 
 EOF
     exit 1
