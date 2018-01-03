@@ -24,7 +24,7 @@ KEY_SERVER="keyserver.ubuntu.com"
 ### END OF CONFIG ###
 
 install_deps() {
-  apt-get update
+  apt update
   apt install haveged -y
   apt install inotify-tools -y
 }
