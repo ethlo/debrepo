@@ -61,6 +61,9 @@ update_repo() {
       exit 1
     fi
 
+    # Remove empty lines starting with 'Depends:'
+    sed -i '/Depends\:\w*$/d' "$DEB_REPO/$flavor/Packages"
+
     echo "Packages"
     db="$WORK_DIR/${flavor}_index.db"
     cd "$DEB_REPO"
